@@ -79,6 +79,7 @@ def user_detail(request, user_id):
 
 @login_required(login_url=LOGIN_URL)
 def user_session_detail(request, user_id, session_id):
+    start = datetime.now()
     user = get_object_or_404(models.UserInfo, pk=user_id)
     session = utils.session_for_id(user, session_id)
     user_form = forms.UserInfoForm(instance=user)
@@ -87,19 +88,27 @@ def user_session_detail(request, user_id, session_id):
     musicpref = get_object_or_None(models.MusicalPreference, pk=user_id)
     musicpref_form = forms.MusicalPrefForm(instance=musicpref, user_id=user_id)
     session_form = forms.SessionStatusForm(instance=session, user_id=user_id, session_id=session_id)
+    all_sessions = utils.all_sessions(user)
+    load_forms = datetime.now()
+    all_goals = utils.users_goals(user)
+    print("Took {} to load all forms and pre stuff for user detail".format(load_forms - start))
+
+    d = {prefix: SkillsData(domain, user, session).to_dict() for domain, prefix in SKILLS_PREFIX_DICT.iteritems()}
+    load_skills = datetime.now()
+    print("Took {} to load skills data for user detail".format(load_skills - load_forms))
 
     return render(request, 'musictherapy/user_detail.html', {
         'userinfo': user,
         'user_info_form': user_form,
         'program_form': program_form,
-        'sessions': utils.all_sessions(user),
+        'sessions': all_sessions,
         'musical_pref_form': musicpref_form,
         'musical_pref': musicpref,
         'tab': request.GET.get('tab', 'info'),
         'session': session,
         'session_form': session_form,
-        'goals': utils.users_goals(user),
-        'data': {prefix: SkillsData(domain, user, session).to_dict() for domain, prefix in SKILLS_PREFIX_DICT.iteritems()},
+        'goals': all_goals,
+        'data': d,
         'export_years': [x for x in xrange(2015, datetime.today().year + 1)],
         'create_session_form': create_session_form,
     })
@@ -353,11 +362,24 @@ def save_goalmeasurables_no_session(request, user_id):
 def program_detail(request, program_id):
     program = get_object_or_None(models.Program, pk=program_id)
     clients = models.UserInfo.objects.filter(program=program, active=1)
-    session_goals = {user.id: {domain: SkillsData(domain, user, utils.current_session(user)).to_dict(program_data_only=True) for domain in SKILLS_PREFIX_DICT.keys()} for user in clients}
     return render(request, 'musictherapy/program_details.html', {
         'program': program,
         'users': clients,
-        'data': session_goals,
+        # 'data': session_goals,
+        'date': timezone.now().date().isoformat().replace('-', '/')
+    })
+
+
+@login_required(login_url=LOGIN_URL)
+def user_program_detail(request, user_id):
+    user = get_object_or_404(models.UserInfo, pk=user_id)
+    print
+    data = {domain: SkillsData(domain, user, utils.current_session(user)).to_dict(program_data_only=True) for domain in SKILLS_PREFIX_DICT.keys()}
+    return render(request, 'musictherapy/component/session_goals.html', {
+        'data': data,
+        'user': user,
+        'session': None,
+        'include_date': True,
         'date': timezone.now().date().isoformat().replace('-', '/')
     })
 
